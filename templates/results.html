@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Analysis Results</title>
+</head>
+<body>
+    <h1>Stock Analysis Results</h1>
+    <ul>
+        {% for result in results %}
+        <li>
+            <h2>{{ result.ticker }}</h2>
+            <p><strong>Current Price:</strong> {{ result.current_price }}</p>
+            <p><strong>50-Day MA:</strong> {{ result.fifty_MA }}</p>
+            <p><strong>200-Day MA:</strong> {{ result.two_hundred_MA }}</p>
+            <p><strong>RSI:</strong> {{ result.RSI }}</p>
+            <p><strong>Decision:</strong> {{ result.decision }}</p>
+            {% if result.alerts %}
+            <p><strong>Alerts:</strong></p>
+            <ul>
+                {% for alert in result.alerts %}
+                <li>{{ alert }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+            {% if result.error %}
+            <p><strong>Error:</strong> {{ result.error }}</p>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

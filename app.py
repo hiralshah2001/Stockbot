@@ -1,0 +1,93 @@
+from flask import Flask, render_template, request
+import yfinance as yf
+import pandas as pd
+
+# Function to calculate RSI
+def calculate_rsi(data, window=14):
+    delta = data['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+# Initialize Flask app
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    tickers = request.form['tickers'].upper().split(',')
+    rsi_low = float(request.form['rsi_low'])
+    rsi_high = float(request.form['rsi_high'])
+    price_lower = float(request.form['price_lower'])
+    price_upper = float(request.form['price_upper'])
+
+    results = []
+
+    for ticker in [t.strip() for t in tickers]:
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.info
+            current_price = info.get('regularMarketPrice', None)
+            history = stock.history(period="1y")
+
+            # Fallback for current price
+            if not current_price and not history.empty:
+                current_price = history['Close'].iloc[-1]
+
+            # Calculate indicators
+            history['50_MA'] = history['Close'].rolling(window=50).mean()
+            history['200_MA'] = history['Close'].rolling(window=200).mean()
+            ma_50 = history['50_MA'].iloc[-1] if len(history) >= 50 else None
+            ma_200 = history['200_MA'].iloc[-1] if len(history) >= 200 else None
+            history['RSI'] = calculate_rsi(history)
+            rsi = history['RSI'].iloc[-1] if not history['RSI'].isna().all() else None
+
+            # Decision-making
+            decision = "Hold"
+            if current_price and ma_50 and ma_200:
+                if current_price > ma_50 and current_price > ma_200:
+                    decision = "Buy (Uptrend)"
+                elif current_price < ma_50 and current_price < ma_200:
+                    decision = "Sell (Downtrend)"
+
+            if rsi and rsi < rsi_low:
+                decision += " (Strong Buy - Oversold)"
+            elif rsi and rsi > rsi_high:
+                decision += " (Strong Sell - Overbought)"
+
+            # Alerts
+            alerts = []
+            if rsi and rsi < rsi_low:
+                alerts.append(f"RSI is {rsi:.2f} (Below {rsi_low} - Oversold)")
+            if rsi and rsi > rsi_high:
+                alerts.append(f"RSI is {rsi:.2f} (Above {rsi_high} - Overbought)")
+            if current_price and current_price < price_lower:
+                alerts.append(f"Price is ${current_price:.2f} (Below ${price_lower:.2f})")
+            if current_price and current_price > price_upper:
+                alerts.append(f"Price is ${current_price:.2f} (Above ${price_upper:.2f})")
+
+            results.append({
+                "ticker": ticker,
+                "current_price": f"${current_price:.2f}" if current_price else "N/A",
+                "fifty_MA": f"${ma_50:.2f}" if ma_50 else "N/A",
+                "two_hundred_MA": f"${ma_200:.2f}" if ma_200 else "N/A",
+                "RSI": f"{rsi:.2f}" if rsi else "N/A",
+                "decision": decision,
+                "alerts": alerts
+            })
+
+        except Exception as e:
+            results.append({
+                "ticker": ticker,
+                "error": f"Error fetching data for {ticker}: {e}"
+            })
+
+    return render_template('results.html', results=results)
+
+if __name__ == '__main__':
+    app.run(debug=True)
